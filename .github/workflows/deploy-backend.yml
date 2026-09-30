@@ -125,6 +125,7 @@ jobs:
             tests/test_platform_follows.py \
             tests/test_social_store.py \
             tests/test_comment_store.py \
+            tests/test_admin_gate.py \
             -v --cov=lambdas/common
 
   test-lambdas:
