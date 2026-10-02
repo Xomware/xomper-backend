@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   deploy:
-    uses: Xomware/github-actions/.github/workflows/deploy-lambda-python.yml@feature/lambda-function-names
+    uses: Xomware/github-actions/.github/workflows/deploy-lambda-python.yml@v1
     with:
       app: xomper
       python-version: '3.13'
