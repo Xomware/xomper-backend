@@ -117,3 +117,7 @@ PLATFORM_FOLLOWS_TABLE = os.environ.get("PLATFORM_FOLLOWS_TABLE", "xomper-follow
 # Social graph. Keyed on the Cognito sub -- Sleeper handles are unverified, so
 # a graph built on them would let anyone befriend as someone else.
 SOCIAL_TABLE = os.environ.get("SOCIAL_TABLE", "xomper-social")
+
+# CLT Dynasty's roster, keyed by lowercased email. Loaded from Supabase
+# whitelisted_users by scripts/migrate_clt_supabase.py; read by clt_gate.
+CLT_MEMBERS_TABLE = os.environ.get("CLT_MEMBERS_TABLE", "xomper-whitelisted-users")
