@@ -67,6 +67,17 @@ CLT_ROUTES = (
     'DELETE/me/sleeper-unlink',
     'GET/players/list',
     '*/clt/*',
+    # Admin routes. Reaching one is not admin rights: each handler still runs
+    # admin_gate.require_admin.
+    'POST/admin/ai-review-postdraft-trigger',
+    'POST/admin/ai-review-preseason-trigger',
+    'POST/admin/ai-review-weekly-trigger',
+    'POST/admin/ai-review-week-preview-trigger',
+    'POST/admin/reports-flag',
+    'GET/admin/announcements-list',
+    'POST/admin/announcements-create',
+    'POST/admin/announcements-update',
+    'POST/admin/announcements-delete',
 )
 
 
