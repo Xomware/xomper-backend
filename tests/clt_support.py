@@ -9,6 +9,7 @@ import boto3
 from lambdas.common.constants import (
     CLT_MEMBERS_TABLE,
     CLT_PROPOSALS_TABLE,
+    CLT_TAXI_TABLE,
     CLT_VOTES_TABLE,
 )
 
@@ -45,6 +46,10 @@ def create_proposal_tables() -> tuple[Any, Any]:
         create_table(CLT_PROPOSALS_TABLE, "id", gsi="league_id"),
         create_table(CLT_VOTES_TABLE, "proposal_id", "user_id"),
     )
+
+
+def create_taxi_table() -> Any:
+    return create_table(CLT_TAXI_TABLE, "league_id", "player_id")
 
 
 def member(n: int, **overrides: Any) -> dict[str, Any]:
