@@ -15,6 +15,7 @@ import functools
 import re
 import traceback
 from typing import Optional
+from lambdas.common.cors import echo_allowed_origin
 from lambdas.common.logger import get_logger
 
 log = get_logger(__file__)
@@ -452,6 +453,9 @@ def handle_errors(handler_name: str, log_context: bool = True):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(event, context):
+            return echo_allowed_origin(_run(event, context), event)
+
+        def _run(event, context):
             try:
                 return func(event, context)
             except XomperError as e:
