@@ -274,12 +274,35 @@ def test_clt_access_token_is_recognised_by_client_id(authorizer):
     assert not allows(policy, f"{STAGE_ARN}/GET/me/leagues")
 
 
+def test_clt_token_policy_covers_the_admin_routes_from_cache(authorizer):
+    policy = authorize(authorizer, cognito_token(aud=CLT_CLIENT_ID), "GET/clt/me")
+
+    for route in (
+        "POST/admin/ai-review-postdraft-trigger",
+        "POST/admin/ai-review-preseason-trigger",
+        "POST/admin/ai-review-weekly-trigger",
+        "POST/admin/ai-review-week-preview-trigger",
+        "POST/admin/reports-flag",
+        "GET/admin/announcements-list",
+        "POST/admin/announcements-create",
+        "POST/admin/announcements-update",
+        "POST/admin/announcements-delete",
+    ):
+        assert allows(policy, f"{STAGE_ARN}/{route}"), route
+
+
 @pytest.mark.parametrize("route", [
     "GET/me/leagues",
     "PUT/me/display-name",
     "POST/admin/users-update",
     "POST/values/compute",
     "POST/me/profile",
+    "GET/admin/announcements-create",
+    "POST/admin/announcements-list",
+    "POST/admin/cron-settings-update",
+    "POST/admin/email-test",
+    "GET/admin/emails-list",
+    "GET/admin/logs-query",
 ])
 def test_clt_token_is_denied_on_unlisted_xomper_routes(authorizer, route):
     policy = authorize(authorizer, cognito_token(aud=CLT_CLIENT_ID), route)
