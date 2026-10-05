@@ -125,3 +125,5 @@ CLT_MEMBERS_TABLE = os.environ.get("CLT_MEMBERS_TABLE", "xomper-whitelisted-user
 # CLT Dynasty's current Sleeper league. Sleeper mints a new id when the league
 # renews each season, so this changes once a year, along with the frontend's.
 CLT_LEAGUE_ID = "1317249551823814656"
+CLT_PROPOSALS_TABLE = os.environ.get("CLT_PROPOSALS_TABLE", "xomper-rule-proposals")
+CLT_VOTES_TABLE = os.environ.get("CLT_VOTES_TABLE", "xomper-rule-votes")
