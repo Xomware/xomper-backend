@@ -10,6 +10,9 @@ it, so their tokens carry the same issuer and are signed by the same keys.
 **The app client id is the only thing scoping a token to Xomper**, which is
 what the client check below is for.
 
+A second client, `clt-client` (CLT Dynasty), is also accepted, but its tokens
+get Allow only on `CLT_ROUTES` instead of the whole stage.
+
 This accepted Supabase ES256 tokens alongside Cognito during the migration,
 so the frontend could move without a flag day. The frontend has moved and no
 longer ships a Supabase client at all, so that path is gone. Note this means
@@ -39,6 +42,7 @@ HANDLER = 'authorizer'
 # Module-level so PyJWKClient's internal key cache survives warm invocations.
 _COGNITO_POOL_ID = os.environ.get('COGNITO_USER_POOL_ID') or ''
 _COGNITO_CLIENT_ID = os.environ.get('COGNITO_CLIENT_ID') or ''
+_COGNITO_CLT_CLIENT_ID = os.environ.get('COGNITO_CLT_CLIENT_ID') or ''
 _AWS_REGION = os.environ.get('AWS_REGION') or 'us-east-1'
 _COGNITO_JWKS = (
     f"https://cognito-idp.{_AWS_REGION}.amazonaws.com/"
@@ -50,8 +54,23 @@ _cognito_jwks: PyJWKClient | None = (
     PyJWKClient(_COGNITO_JWKS, cache_keys=True) if _COGNITO_JWKS else None
 )
 
+# Every route a CLT token may call, as `METHOD/path` under the stage. API
+# Gateway caches the returned policy per token for 300s, so it has to list
+# them all: a policy naming only the requested route would deny the next one
+# from cache.
+CLT_ROUTES = (
+    'GET/ai-reports/latest',
+    'GET/ai-reports/list',
+    'GET/announcements/list',
+    'GET/me/profile',
+    'PUT/me/sleeper-link',
+    'DELETE/me/sleeper-unlink',
+    'GET/players/list',
+    '*/clt/*',
+)
 
-def generate_policy(effect: str, resource: str, claims: dict | None = None) -> dict:
+
+def generate_policy(effect: str, resource: str | list[str], claims: dict | None = None) -> dict:
     """Return a valid AWS IAM policy response for API Gateway."""
     policy = {
         'principalId': (claims or {}).get('sub') or PRODUCT,
@@ -108,11 +127,11 @@ def _try_cognito(token: str) -> dict | None:
     # A token from another app client on the shared pool is a valid Cognito
     # token but not one for this app. The pool is estate-wide, so this check is
     # what keeps xomforms or xomtracks sessions out of Xomper's API.
-    if _COGNITO_CLIENT_ID:
-        presented = claims.get('client_id') or claims.get('aud')
-        if presented != _COGNITO_CLIENT_ID:
-            log.warning("Authorizer: cognito token for a different app client")
-            return None
+    presented = claims.get('client_id') or claims.get('aud')
+    claims['_clt'] = bool(_COGNITO_CLT_CLIENT_ID) and presented == _COGNITO_CLT_CLIENT_ID
+    if _COGNITO_CLIENT_ID and not claims['_clt'] and presented != _COGNITO_CLIENT_ID:
+        log.warning("Authorizer: cognito token for a different app client")
+        return None
 
     claims['_provider'] = 'cognito'
     return claims
@@ -149,13 +168,18 @@ def handler(event: dict, context: object) -> dict:
         if claims:
             arn_parts = method_arn.split(':')
             api_gateway_arn_tmp = arn_parts[5].split('/')
-            resource_arn = (
+            stage_arn = (
                 f"{arn_parts[0]}:{arn_parts[1]}:{arn_parts[2]}:"
                 f"{arn_parts[3]}:{arn_parts[4]}:"
-                f"{api_gateway_arn_tmp[0]}/{api_gateway_arn_tmp[1]}/*"
+                f"{api_gateway_arn_tmp[0]}/{api_gateway_arn_tmp[1]}"
             )
+            if claims['_clt']:
+                log.info("Authorizer: Allow CLT routes via cognito")
+                return generate_policy(
+                    'Allow', [f"{stage_arn}/{route}" for route in CLT_ROUTES], claims
+                )
             log.info(f"Authorizer: Allow via {claims.get('_provider')}")
-            return generate_policy('Allow', resource_arn, claims)
+            return generate_policy('Allow', f"{stage_arn}/*", claims)
 
         log.warning("Authorizer: Deny - token decode failed")
         return generate_policy('Deny', method_arn)

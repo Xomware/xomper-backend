@@ -13,6 +13,7 @@ a token for Xomper.
 from __future__ import annotations
 
 import importlib
+from fnmatch import fnmatchcase
 
 import jwt
 import pytest
@@ -20,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 POOL_ID = "us-east-1_ZrN8NaaIv"
 CLIENT_ID = "38e5sjavoa76ghbl5hpjsapc49"
+CLT_CLIENT_ID = "481dfniqtuh8062gjqr1o1u469"
 REGION = "us-east-1"
 ISSUER = f"https://cognito-idp.{REGION}.amazonaws.com/{POOL_ID}"
 SUPABASE_URL = "https://proj.supabase.co"
@@ -42,6 +44,7 @@ def authorizer(monkeypatch):
     """
     monkeypatch.setenv("COGNITO_USER_POOL_ID", POOL_ID)
     monkeypatch.setenv("COGNITO_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setenv("COGNITO_CLT_CLIENT_ID", CLT_CLIENT_ID)
     monkeypatch.setenv("AWS_REGION", REGION)
 
     from lambdas.authorizer import handler as mod
@@ -201,3 +204,90 @@ def test_allow_is_scoped_to_the_api_stage_not_one_method(authorizer):
     # Wildcarding the stage is what makes the decision cacheable across
     # routes; without it every endpoint pays a fresh authorizer invocation.
     assert resource.endswith("abc123/dev/*")
+
+
+STAGE_ARN = "arn:aws:execute-api:us-east-1:123456789012:abc123/dev"
+
+
+def allows(policy, method_arn):
+    """Evaluate the policy the way API Gateway does against a cached decision.
+
+    IAM's `*` matches any run of characters, slashes included, which is what
+    fnmatchcase does for ARNs (they contain no `[`).
+    """
+    statement = policy["policyDocument"]["Statement"][0]
+    resources = statement["Resource"]
+    if isinstance(resources, str):
+        resources = [resources]
+    return statement["Effect"] == "Allow" and any(
+        fnmatchcase(method_arn, r) for r in resources
+    )
+
+
+def authorize(authorizer, token, route):
+    return authorizer.handler(
+        {"authorizationToken": f"Bearer {token}", "methodArn": f"{STAGE_ARN}/{route}"},
+        None,
+    )
+
+
+def test_xomper_client_policy_is_unchanged(authorizer):
+    policy = authorize(authorizer, cognito_token(), "GET/users/me")
+
+    assert policy == {
+        "principalId": "cog-user-1",
+        "policyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Action": "execute-api:*",
+                    "Effect": "Allow",
+                    "Resource": f"{STAGE_ARN}/*",
+                }
+            ],
+        },
+        "context": {
+            "sub": "cog-user-1",
+            "email": "d@x.com",
+            "provider": "cognito",
+            "groups": "",
+        },
+    }
+
+
+def test_clt_token_policy_covers_other_listed_routes_from_cache(authorizer):
+    # One decision, cached per token, has to serve every CLT route.
+    policy = authorize(authorizer, cognito_token(aud=CLT_CLIENT_ID), "GET/clt/me")
+
+    assert allows(policy, f"{STAGE_ARN}/GET/clt/me")
+    assert allows(policy, f"{STAGE_ARN}/GET/ai-reports/latest")
+    assert allows(policy, f"{STAGE_ARN}/POST/clt/proposals-vote")
+    assert policy["context"]["sub"] == "cog-user-1"
+
+
+def test_clt_access_token_is_recognised_by_client_id(authorizer):
+    token = cognito_token(token_use="access", client_id=CLT_CLIENT_ID, aud=None)
+
+    policy = authorize(authorizer, token, "GET/players/list")
+
+    assert allows(policy, f"{STAGE_ARN}/GET/players/list")
+    assert not allows(policy, f"{STAGE_ARN}/GET/me/leagues")
+
+
+@pytest.mark.parametrize("route", [
+    "GET/me/leagues",
+    "PUT/me/display-name",
+    "POST/admin/users-update",
+    "POST/values/compute",
+    "POST/me/profile",
+])
+def test_clt_token_is_denied_on_unlisted_xomper_routes(authorizer, route):
+    policy = authorize(authorizer, cognito_token(aud=CLT_CLIENT_ID), route)
+
+    assert not allows(policy, f"{STAGE_ARN}/{route}")
+
+
+def test_foreign_client_is_denied_with_clt_configured(authorizer):
+    policy = authorize(authorizer, cognito_token(aud="82sn0drkf2fvfjn94nmoc857p"), "GET/clt/me")
+
+    assert effect(policy) == "Deny"
