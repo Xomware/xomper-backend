@@ -127,3 +127,4 @@ CLT_MEMBERS_TABLE = os.environ.get("CLT_MEMBERS_TABLE", "xomper-whitelisted-user
 CLT_LEAGUE_ID = "1317249551823814656"
 CLT_PROPOSALS_TABLE = os.environ.get("CLT_PROPOSALS_TABLE", "xomper-rule-proposals")
 CLT_VOTES_TABLE = os.environ.get("CLT_VOTES_TABLE", "xomper-rule-votes")
+CLT_TAXI_TABLE = os.environ.get("CLT_TAXI_TABLE", "xomper-taxi-steal-requests")
