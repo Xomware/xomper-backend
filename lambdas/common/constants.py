@@ -128,3 +128,4 @@ CLT_LEAGUE_ID = "1317249551823814656"
 CLT_PROPOSALS_TABLE = os.environ.get("CLT_PROPOSALS_TABLE", "xomper-rule-proposals")
 CLT_VOTES_TABLE = os.environ.get("CLT_VOTES_TABLE", "xomper-rule-votes")
 CLT_TAXI_TABLE = os.environ.get("CLT_TAXI_TABLE", "xomper-taxi-steal-requests")
+CLT_SETTINGS_TABLE = os.environ.get("CLT_SETTINGS_TABLE", "xomper-clt-settings")
