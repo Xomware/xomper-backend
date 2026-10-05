@@ -85,7 +85,23 @@ def test_member_gets_their_row_and_linked_sleeper_id(mod, tables):
             "sleeperUserId": "111",
         },
         "linkedSleeperUserId": "222",
+        "isAdmin": False,
     }
+
+
+def test_admin_member_is_flagged(mod, tables, monkeypatch):
+    from lambdas.common import admin_gate
+
+    members, _ = tables
+    members.put_item(Item=MEMBER)
+    admins = {"member@example.com": {"email": "member@example.com", "is_admin": True}}
+    monkeypatch.setattr(admin_gate, "get_whitelisted_user_by_email", admins.get)
+    admin_event = event()
+    admin_event["requestContext"]["authorizer"]["groups"] = "admin"
+
+    assert body_of(mod.handler(admin_event, None))["isAdmin"] is True
+    # The admin row alone, without the Cognito group, is not admin.
+    assert body_of(mod.handler(event(), None))["isAdmin"] is False
 
 
 def test_member_without_a_platform_record_has_no_linked_id(mod, tables):
