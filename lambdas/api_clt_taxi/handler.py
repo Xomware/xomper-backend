@@ -11,6 +11,9 @@ The player must sit on another roster's taxi squad in CLT's league right now,
 checked against Sleeper. The table is keyed by league + player, so a player
 can carry one request; a second gets 409. `requested_by` holds the member's
 email, and responses carry display names instead.
+
+A new request emails active members, and the roster's owner separately,
+through `clt_alerts` while CLT's `emailNotifications` is on.
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
+from lambdas.common import clt_alerts
 from lambdas.common.clt_gate import list_members, require_member
 from lambdas.common.constants import CLT_LEAGUE_ID, CLT_TAXI_TABLE
 from lambdas.common.errors import ValidationError, XomperError, handle_errors
@@ -98,6 +102,7 @@ def _request(event: dict[str, Any], member: dict[str, Any]) -> dict[str, Any]:
             status=409,
         ) from err
 
+    clt_alerts.steal_requested(player_id, member.get("displayName", ""), item["owner_id"])
     names = {member["email"]: member.get("displayName", "")}
     return success_response({"request": _shape(item, names, member["email"])}, status_code=201)
 

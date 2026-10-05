@@ -15,6 +15,9 @@ member's email. Responses carry display names instead, never emails.
 
 A vote is final: the conditional put refuses a second vote from the same
 member rather than overwriting it.
+
+Creating a proposal, and moving one to approved or rejected, emails active
+members through `clt_alerts` while CLT's `emailNotifications` is on.
 """
 from __future__ import annotations
 
@@ -26,6 +29,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
+from lambdas.common import clt_alerts
 from lambdas.common.clt_gate import list_members, require_clt_admin, require_member
 from lambdas.common.constants import CLT_LEAGUE_ID, CLT_PROPOSALS_TABLE, CLT_VOTES_TABLE
 from lambdas.common.errors import NotFoundError, ValidationError, XomperError, handle_errors
@@ -143,6 +147,7 @@ def _create(event: dict[str, Any], member: dict[str, Any]) -> dict[str, Any]:
         "updated_at": now,
     }
     _proposals().put_item(Item=proposal)
+    clt_alerts.proposal_created(proposal, member.get("displayName", ""))
     names = {member["email"]: member.get("displayName", "")}
     return success_response({"proposal": _shape(proposal, [], names, member["email"])}, status_code=201)
 
@@ -192,10 +197,10 @@ def _status(event: dict[str, Any], member: dict[str, Any]) -> dict[str, Any]:
     require_clt_admin(event)
     body = parse_body(event)
     status = _choice(body, "status", STATUSES)
-    proposal = _get(str(body.get("proposalId") or ""), "_status")
+    before = _get(str(body.get("proposalId") or ""), "_status")
 
     proposal = _proposals().update_item(
-        Key={"id": proposal["id"]},
+        Key={"id": before["id"]},
         UpdateExpression="SET #status = :status, updated_at = :now",
         # A delete landing between the read and this write must not leave
         # behind a new item holding only the status.
@@ -205,7 +210,15 @@ def _status(event: dict[str, Any], member: dict[str, Any]) -> dict[str, Any]:
         ReturnValues="ALL_NEW",
     )["Attributes"]
 
-    shaped = _shape(proposal, _votes_for(proposal["id"]), _names(), member["email"])
+    names = _names()
+    shaped = _shape(proposal, _votes_for(proposal["id"]), names, member["email"])
+    if status != before["status"]:
+        clt_alerts.proposal_decided(
+            proposal,
+            names.get(proposal["proposed_by"], ""),
+            shaped["voters"]["yes"],
+            shaped["voters"]["no"],
+        )
     return success_response({"proposal": shaped})
 
 
