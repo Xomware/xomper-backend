@@ -19,6 +19,7 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
+from lambdas.common.admin_gate import NotAdmin, require_admin
 from lambdas.common.caller_identity import get_caller
 from lambdas.common.constants import CLT_MEMBERS_TABLE
 from lambdas.common.errors import DynamoDBError, XomperError
@@ -35,6 +36,18 @@ class NotMember(XomperError):
             message="not on the CLT roster",
             handler="clt_gate",
             function="require_member",
+            status=403,
+        )
+
+
+class NotCltAdmin(XomperError):
+    """403 for an active member who is not an admin."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="CLT admins only",
+            handler="clt_gate",
+            function="require_clt_admin",
             status=403,
         )
 
@@ -87,3 +100,28 @@ def require_member(event: dict[str, Any]) -> dict[str, Any]:
     log.info(f"clt_gate: bound member row to sub={caller.user_id}")
     member["sub"] = caller.user_id
     return member
+
+
+def require_clt_admin(event: dict[str, Any]) -> dict[str, Any]:
+    """`require_member`, then Xomper's `require_admin`. Returns the member row."""
+    member = require_member(event)
+    try:
+        require_admin(event)
+    except NotAdmin as err:
+        raise NotCltAdmin() from err
+    return member
+
+
+def list_members() -> list[dict[str, Any]]:
+    """Every roster row, active or not. The roster is a dozen rows, so a scan."""
+    items: list[dict[str, Any]] = []
+    kwargs: dict[str, Any] = {}
+    while True:
+        try:
+            page = _table().scan(**kwargs)
+        except ClientError as err:
+            raise DynamoDBError(f"list_members scan failed: {err}", table=CLT_MEMBERS_TABLE) from err
+        items.extend(page.get("Items", []))
+        if "LastEvaluatedKey" not in page:
+            return items
+        kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
