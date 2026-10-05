@@ -129,3 +129,4 @@ CLT_PROPOSALS_TABLE = os.environ.get("CLT_PROPOSALS_TABLE", "xomper-rule-proposa
 CLT_VOTES_TABLE = os.environ.get("CLT_VOTES_TABLE", "xomper-rule-votes")
 CLT_TAXI_TABLE = os.environ.get("CLT_TAXI_TABLE", "xomper-taxi-steal-requests")
 CLT_SETTINGS_TABLE = os.environ.get("CLT_SETTINGS_TABLE", "xomper-clt-settings")
+CLT_URL = "https://clt.dynasty.xomware.com"
