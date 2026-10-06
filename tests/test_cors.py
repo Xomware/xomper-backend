@@ -64,6 +64,14 @@ def test_clt_origin_is_echoed_on_success():
     assert json.loads(response["body"]) == {"ok": True}
 
 
+@pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000"])
+def test_clt_local_dev_origin_is_echoed(origin):
+    response = ok_handler(event({"Origin": origin}), None)
+
+    assert response["headers"]["Access-Control-Allow-Origin"] == origin
+    assert response["headers"]["Vary"] == "Origin"
+
+
 @pytest.mark.parametrize("handler,status", [(raising_handler, 404), (crashing_handler, 500)])
 def test_clt_origin_is_echoed_on_errors(handler, status):
     response = handler(event({"Origin": CLT}), None)
@@ -90,6 +98,8 @@ def test_origin_is_read_from_multi_value_headers():
     "https://evil.example",
     "https://clt.dynasty.xomware.com.evil.example",
     "http://clt.dynasty.xomware.com",
+    "http://localhost:4200",
+    "https://localhost:3000",
     "",
 ])
 def test_unlisted_origin_gets_the_xomper_default(origin):

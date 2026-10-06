@@ -15,7 +15,14 @@ from __future__ import annotations
 from typing import Any
 
 DEFAULT_ORIGIN = "https://xomper.xomware.com"
-ALLOWED_ORIGINS = frozenset({DEFAULT_ORIGIN, "https://clt.dynasty.xomware.com"})
+# The localhost pair is CLT's `next dev`, which the clt-client's callback URLs
+# already allow, so local dev can run against this API.
+ALLOWED_ORIGINS = frozenset({
+    DEFAULT_ORIGIN,
+    "https://clt.dynasty.xomware.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+})
 
 _ALLOW_ORIGIN = "Access-Control-Allow-Origin"
 
