@@ -5,9 +5,10 @@ No body. Caller identity comes from `requestContext.authorizer` through
 `clt_gate.require_member`, which 403s anyone not on the roster.
 
 Records aggregate every divisional regular-season game back through the
-`previous_league_id` chain, keyed by Sleeper user id so a manager keeps their
-record across seasons. Top two per division qualify; `worldcup_helper` holds
-the conservative clinch model.
+`previous_league_id` chain, keyed by franchise (roster_id, which Sleeper keeps
+across renewals) and shown under the roster's current owner and team name, so a
+taken-over team keeps its history. `userId` is that current owner. Top two per
+division qualify; `worldcup_helper` holds the conservative clinch model.
 
 `gamesRemaining` is per division: the most unplayed divisional games any of
 its teams has left this season. A pre-draft season has no schedule yet, so it
@@ -36,6 +37,7 @@ from lambdas.common.worldcup_helper import (
     division_name_map_from_league,
     gather_chain_matchups,
     get_league_chain,
+    team_name_of,
 )
 
 HANDLER = "api_clt_worldcup"
@@ -52,6 +54,27 @@ def _fetch_weeks(chain: list[dict[str, Any]]) -> dict[tuple[str, int], list[dict
     with ThreadPoolExecutor(max_workers=10) as pool:
         weeks = list(pool.map(lambda key: get_sleeper_league_matchups(*key), keys))
     return dict(zip(keys, weeks))
+
+
+def _by_franchise(
+    matchups: list[dict[str, Any]],
+    rosters: list[dict[str, Any]],
+    users: list[dict[str, Any]],
+) -> None:
+    # The helper keys by owner, as Xomper's movement pushes need; CLT wants the
+    # franchise, so rewrite each side to the roster's current owner. A roster
+    # with no current owner keeps the owner of that season.
+    user_by_id = {u["user_id"]: u for u in users}
+    owner_by_roster = {r["roster_id"]: r.get("owner_id") for r in rosters}
+    for m in matchups:
+        for side in ("team_a", "team_b"):
+            owner = owner_by_roster.get(m[f"{side}_roster_id"])
+            if not owner:
+                continue
+            user = user_by_id.get(owner) or {}
+            m[f"{side}_user_id"] = owner
+            m[f"{side}_username"] = user.get("username") or ""
+            m[f"{side}_team_name"] = team_name_of(user)
 
 
 def _unplayed_divisional_games(matchups: list[dict[str, Any]], league_id: str) -> Counter:
@@ -93,6 +116,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         fetch_rosters_fn=get_sleeper_league_rosters,
         fetch_users_fn=get_sleeper_league_users,
         fetch_matchups_fn=lambda league_id, week: weeks[(league_id, week)],
+    )
+    _by_franchise(
+        matchups,
+        get_sleeper_league_rosters(head["league_id"]),
+        get_sleeper_league_users(head["league_id"]),
     )
     left = _unplayed_divisional_games(matchups, head["league_id"])
 
