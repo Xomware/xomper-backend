@@ -261,6 +261,10 @@ def get_league_chain(
     return chain
 
 
+def team_name_of(user: dict[str, Any]) -> str:
+    return (user.get("metadata") or {}).get("team_name") or user.get("display_name") or ""
+
+
 def gather_chain_matchups(
     chain: list[dict[str, Any]],
     total_regular_weeks: int,
@@ -328,14 +332,16 @@ def gather_chain_matchups(
                     "league_id": league_id,
                     "season": season,
                     "week": week,
+                    "team_a_roster_id": a["roster_id"],
                     "team_a_user_id": roster_a.get("owner_id") or "",
                     "team_a_username": user_a.get("username") or "",
-                    "team_a_team_name": (user_a.get("metadata") or {}).get("team_name") or user_a.get("display_name") or "",
+                    "team_a_team_name": team_name_of(user_a),
                     "team_a_division": roster_a.get("settings", {}).get("division") or 0,
                     "team_a_points": a_pts,
+                    "team_b_roster_id": b["roster_id"],
                     "team_b_user_id": roster_b.get("owner_id") or "",
                     "team_b_username": user_b.get("username") or "",
-                    "team_b_team_name": (user_b.get("metadata") or {}).get("team_name") or user_b.get("display_name") or "",
+                    "team_b_team_name": team_name_of(user_b),
                     "team_b_division": roster_b.get("settings", {}).get("division") or 0,
                     "team_b_points": b_pts,
                     "winner_roster_id": winner,

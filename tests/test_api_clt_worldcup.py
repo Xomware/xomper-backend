@@ -211,3 +211,31 @@ def test_a_failed_week_fails_the_request_rather_than_skewing_records(mod, monkey
     monkeypatch.setattr(mod, "get_sleeper_league_matchups", flaky)
 
     assert mod.handler(event(), None)["statusCode"] == 502
+
+
+def test_taken_over_team_is_one_franchise_under_its_current_owner(mod, monkeypatch):
+    # Roster 3 changed hands at the 2026 renewal: u3 ran it in 2025, u7 now.
+    def taken_over_rosters(league_id):
+        out = rosters(league_id)
+        if league_id == CLT_LEAGUE_ID:
+            out[2]["owner_id"] = "u7"
+        return out
+
+    def taken_over_users(league_id):
+        out = users(league_id)
+        if league_id == CLT_LEAGUE_ID:
+            out[2] = {"user_id": "u7", "username": "user7", "metadata": {"team_name": "Team 7"}}
+        return out
+
+    monkeypatch.setattr(mod, "get_sleeper_league_rosters", taken_over_rosters)
+    monkeypatch.setattr(mod, "get_sleeper_league_users", taken_over_users)
+
+    division = body_of(mod.handler(event(), None))["divisions"][0]
+
+    # u3's 2025 loss to Team 1 and u7's 2026 loss to Team 2, as one record.
+    assert division["teams"] == [
+        team("u1", 2, 0, 0, 210, 190, "alive"),
+        team("u2", 1, 1, 0, 210, 200, "alive"),
+        team("u7", 0, 2, 0, 200, 230, "alive"),
+    ]
+    assert division["gamesRemaining"] == 2
