@@ -119,6 +119,11 @@ PLAYER_FIELDS = (
     "college",
     "depth_chart_order",
     "search_full_name",
+    # CLT's NFL team window draws the depth chart as a formation: the slot
+    # (LWR, RWR, SWR, ...) splits receivers that depth_chart_order ranks as one
+    # list, and the body part labels an injury badge.
+    "depth_chart_position",
+    "injury_body_part",
 )
 
 

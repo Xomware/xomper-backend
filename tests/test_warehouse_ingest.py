@@ -78,3 +78,34 @@ class TestCrosswalkCoverageGuard:
         out = mod._espn_ids_by_sleeper_id("2025", {})
 
         assert out["p2"] == {"espn_id": "901", "source": "fantasycalc"}
+
+
+def test_refresh_players_stores_the_depth_slot_and_injury_body_part():
+    import boto3
+    from moto import mock_aws
+
+    with mock_aws():
+        table = boto3.resource("dynamodb", region_name="us-east-1").create_table(
+            TableName=mod.PLAYERS_TABLE_NAME,
+            KeySchema=[{"AttributeName": "playerId", "KeyType": "HASH"}],
+            AttributeDefinitions=[{"AttributeName": "playerId", "AttributeType": "S"}],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        players = {
+            "9997": {
+                "position": "WR",
+                "team": "LAC",
+                "depth_chart_order": 1,
+                "depth_chart_position": "SWR",
+                "injury_status": "Questionable",
+                "injury_body_part": "Foot",
+            },
+            # Not a valued position, so it is never written.
+            "9998": {"position": "OT", "team": "LAC", "depth_chart_position": "LT"},
+        }
+
+        assert mod._refresh_players(players, {}) == 1
+        item = table.get_item(Key={"playerId": "9997"})["Item"]
+
+    assert item["depth_chart_position"] == "SWR"
+    assert item["injury_body_part"] == "Foot"
