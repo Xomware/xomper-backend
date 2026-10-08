@@ -30,7 +30,7 @@ from __future__ import annotations
 from typing import Any
 
 from lambdas.common.cron_settings import get_cron_setting
-from lambdas.common.errors import handle_errors
+from lambdas.common.errors import ReportAlreadyExistsError, handle_errors
 from lambdas.common.logger import get_logger
 from lambdas.common.utility_helpers import success_response
 from lambdas.common.weekly_orchestrator import run_weekly
@@ -92,6 +92,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             force=force,
             seasons_back=seasons_back,
             use_previous_season=use_previous_season,
+        )
+    except ReportAlreadyExistsError as err:
+        log.info(f"notif_ai_review_weekly: {err.message} — skipping")
+        return success_response(
+            {"Success": True, "skipped": True, "reason": "exists"},
+            is_api=False,
         )
     except Exception as err:  # noqa: BLE001 — cron must not flap
         log.error(

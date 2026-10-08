@@ -147,3 +147,19 @@ def test_skipped_offseason_response(patched_handler) -> None:
         body = json.loads(body)
     assert body["status"] == "skipped_offseason"
     assert body["delivery_count"] == 0
+
+
+def test_existing_period_is_a_clean_skip(patched_handler) -> None:
+    import json
+
+    from lambdas.common.errors import ReportAlreadyExistsError
+    from lambdas.notif_ai_review_weekly.handler import handler
+
+    patched_handler["raises"] = ReportAlreadyExistsError(
+        message="A weekly report already exists for period 2026W04"
+    )
+    response = handler({}, context=None)
+    body = response["body"]
+    if isinstance(body, str):
+        body = json.loads(body)
+    assert body == {"Success": True, "skipped": True, "reason": "exists"}

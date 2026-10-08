@@ -46,10 +46,14 @@ AI_REVIEW_PRESEASON_OK_SEASON_TYPES = ("pre", "off")
 # included so playoff weeks (19+) also recap.
 AI_REVIEW_WEEKLY_OK_SEASON_TYPES = ("regular", "post")
 AI_REVIEW_WEEKLY_PROMPT_VERSION = os.environ.get(
-    "AI_REVIEW_WEEKLY_PROMPT_VERSION", "f3-weekly-2026-05-21"
+    "AI_REVIEW_WEEKLY_PROMPT_VERSION", "f3-weekly-2026-10-07"
 )
 AI_REVIEW_WEEKLY_MEMORY_LOOKBACK = 6
 AI_REVIEW_WEEKLY_MAX_NEW_MEMORIES = 5
+# Set per lambda in Terraform. The CLT cron runs with delivery off: the report
+# is stored for clt.dynasty.xomware.com and nobody is emailed or pushed.
+AI_REVIEW_WEEKLY_MODEL = os.environ.get("AI_REVIEW_WEEKLY_MODEL", AI_REVIEW_DEFAULT_MODEL)
+AI_REVIEW_WEEKLY_DELIVER = os.environ.get("AI_REVIEW_WEEKLY_DELIVER", "true").lower() == "true"
 
 # Week Preview (forward-looking Wednesday newsletter) constants.
 # Same OK season types as weekly — preview only fires while the

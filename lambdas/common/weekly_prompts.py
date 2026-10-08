@@ -22,7 +22,7 @@ across F1 + F2 + F3 calls landing within the cache TTL.
 User prompt: this week's matchup results, the prior N memories
 (season context), and a task footer pinning the JSON envelope.
 
-Pinned `PROMPT_VERSION` is `f3-weekly-2026-05-21`.
+Pinned `PROMPT_VERSION` is `f3-weekly-2026-10-07`.
 """
 from __future__ import annotations
 
@@ -261,8 +261,9 @@ def build_user_prompt(
             l_bench = float(loser.get("bench_points") or 0.0)
 
             header = (
-                f"### Matchup #{mid}: {w_name} ({w_team}) "
-                f"{w_pts:.2f} — {l_pts:.2f} {l_name} ({l_team})"
+                f"### Matchup #{mid}: {w_name} ({w_team}, user_id "
+                f"{winner.get('user_id')}) {w_pts:.2f} — {l_pts:.2f} "
+                f"{l_name} ({l_team}, user_id {loser.get('user_id')})"
             )
             lines.append(header)
             if is_tie:
@@ -317,6 +318,11 @@ def build_user_prompt(
         f"fences, no commentary outside the JSON. Reference prior "
         f"memories where they fit naturally. Lean on the lore. Don't "
         f"invent injuries, trades, or news that isn't in the data. "
+        f"Match each manager to the lore by user_id. A user_id that "
+        f"isn't in the lore is a manager the lore doesn't cover — call "
+        f"them by team name and give them nobody else's lore. The news "
+        f"section doesn't say who rosters a player, so don't tie a news "
+        f"item to a manager. "
         f"Cap new_memories at {AI_REVIEW_WEEKLY_MAX_NEW_MEMORIES}."
     )
 

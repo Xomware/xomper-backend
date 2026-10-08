@@ -43,12 +43,14 @@ from lambdas.common import (
 )
 from lambdas.common.constants import (
     ADMIN_DOMINICK_USER_ID,
-    AI_REVIEW_DEFAULT_MODEL,
+    AI_REVIEW_WEEKLY_DELIVER,
     AI_REVIEW_WEEKLY_MAX_NEW_MEMORIES,
     AI_REVIEW_WEEKLY_MAX_TOKENS,
     AI_REVIEW_WEEKLY_MEMORY_LOOKBACK,
+    AI_REVIEW_WEEKLY_MODEL,
     AI_REVIEW_WEEKLY_OK_SEASON_TYPES,
     AI_REVIEW_WEEKLY_PROMPT_VERSION,
+    CLT_LEAGUE_ID,
 )
 from lambdas.common.email_templates.ai_review import (
     build_email_payload,
@@ -219,7 +221,7 @@ def run_weekly(
                 "report": None,
                 "dry_run": dry_run,
                 "delivery_count": 0,
-                "model": AI_REVIEW_DEFAULT_MODEL,
+                "model": AI_REVIEW_WEEKLY_MODEL,
                 "token_usage": None,
                 "week": resolved_week,
                 "period": _period(resolved_week, nfl_season),
@@ -235,6 +237,8 @@ def run_weekly(
 
     # --- data fetch source league --------------------------------------------
     matchup_league_id = league_id
+    if seasons_back == 0:
+        matchup_league_id = _current_season_league_id(league_id)
     if seasons_back > 0:
         historical_league = resolve_historical_league(
             league_id,
@@ -274,21 +278,22 @@ def run_weekly(
     period = _period(resolved_week, season)
 
     # --- idempotency ---------------------------------------------------------
-    existing = ai_reports_store.get_latest(league_id, REPORT_TYPE)
+    existing = ai_reports_store.get_report(
+        league_id=league_id, report_type=REPORT_TYPE, period=period
+    )
     if existing and not force:
-        if existing.get("period") == period:
-            raise ReportAlreadyExistsError(
-                message=(
-                    f"A weekly report already exists for period {period}"
-                ),
-                handler="notif_ai_review_weekly",
-                existing={
-                    "league_id": existing.get("league_id"),
-                    "report_type": existing.get("report_type"),
-                    "period": existing.get("period"),
-                    "created_at": existing.get("created_at"),
-                },
-            )
+        raise ReportAlreadyExistsError(
+            message=(
+                f"A weekly report already exists for period {period}"
+            ),
+            handler="notif_ai_review_weekly",
+            existing={
+                "league_id": existing.get("league_id"),
+                "report_type": existing.get("report_type"),
+                "period": existing.get("period"),
+                "created_at": existing.get("created_at"),
+            },
+        )
 
     # --- data load -----------------------------------------------------------
     matchups_raw = get_sleeper_league_matchups(
@@ -340,7 +345,7 @@ def run_weekly(
     raw_text, token_usage = claude_helper.generate(
         prompt=user_prompt,
         system=system_blocks,
-        model=AI_REVIEW_DEFAULT_MODEL,
+        model=AI_REVIEW_WEEKLY_MODEL,
         max_tokens=AI_REVIEW_WEEKLY_MAX_TOKENS,
         return_usage=True,
     )
@@ -356,7 +361,7 @@ def run_weekly(
         # Back-compat tag — present for any downstream consumers that
         # read this field. True when seasons_back >= 1.
         "use_previous_season": seasons_back >= 1,
-        "model": AI_REVIEW_DEFAULT_MODEL,
+        "model": AI_REVIEW_WEEKLY_MODEL,
         "prompt_version": AI_REVIEW_WEEKLY_PROMPT_VERSION,
         "token_usage": token_usage,
         "nfl_season": nfl_season,
@@ -421,6 +426,29 @@ def run_weekly(
                     f"memory_count_out failed: {err}"
                 )
 
+    if not AI_REVIEW_WEEKLY_DELIVER:
+        log.info(
+            f"notif_ai_review_weekly: delivery off — stored {period}, "
+            f"no email or push"
+        )
+        return {
+            "status": "stored",
+            "report_id": report_row.get("sk"),
+            "report": report_row,
+            "dry_run": dry_run,
+            "delivery_count": 0,
+            "model": AI_REVIEW_WEEKLY_MODEL,
+            "token_usage": token_usage,
+            "week": resolved_week,
+            "period": period,
+            "memory_count_in": len(prior_memories),
+            "memory_count_out": written_memories,
+            "envelope_parsed": parse_ok,
+            "seasons_back": seasons_back,
+            "use_previous_season": seasons_back >= 1,
+            "previews": None,
+        }
+
     # --- pre-broadcast DNB check (Admin Portal F3) ---------------------------
     # Re-read the row right before SES fan-out so admins who flipped
     # `do_not_broadcast=true` AFTER generation but BEFORE broadcast
@@ -480,7 +508,7 @@ def run_weekly(
         "report": report_row,
         "dry_run": dry_run,
         "delivery_count": delivery_count,
-        "model": AI_REVIEW_DEFAULT_MODEL,
+        "model": AI_REVIEW_WEEKLY_MODEL,
         "token_usage": token_usage,
         "week": resolved_week,
         "period": period,
@@ -499,6 +527,19 @@ def run_weekly(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _current_season_league_id(league_id: str) -> str:
+    """whitelisted_leagues still holds CLT's 2025 id, and reports + memories
+    stay keyed on it so the site's archive is continuous. Sleeper minted a new
+    id when the league renewed, so this season's matchups come from
+    CLT_LEAGUE_ID when it is the renewal of the whitelisted league."""
+    if league_id == CLT_LEAGUE_ID:
+        return league_id
+    current = get_sleeper_league(CLT_LEAGUE_ID) or {}
+    if str(current.get("previous_league_id") or "") == league_id:
+        return CLT_LEAGUE_ID
+    return league_id
 
 
 def _enforce_not_dnb(*, league_id: str, period: str) -> None:
