@@ -281,14 +281,13 @@ def patched_orchestrator(monkeypatch: pytest.MonkeyPatch):
 
     def _get_report(*, league_id, report_type, period):
         override = state.get("fresh_metadata")
-        if override is not None:
-            base = (
-                state["writes"][-1]
-                if state["writes"]
-                else {"metadata": {}}
-            )
+        if state["writes"]:
+            base = state["writes"][-1]
+            if override is None:
+                return base
             return {**base, "metadata": {**(base.get("metadata") or {}), **override}}
-        return state["writes"][-1] if state["writes"] else None
+        existing = state["existing_report"]
+        return existing if existing and existing.get("period") == period else None
 
     def _stamp_broadcast_at(*, league_id, report_type, period):
         return _update_metadata(
@@ -582,6 +581,56 @@ class TestOrchestratorDelivery:
         assert push["title"] == "This week's AI recap is in"
         partials = [u["partial"] for u in patched_orchestrator["metadata_updates"]]
         assert any("broadcast_at" in p for p in partials)
+
+
+    def test_delivery_off_stores_without_email_or_push(
+        self, patched_orchestrator, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from lambdas.common import weekly_orchestrator as orch
+
+        monkeypatch.setattr(orch, "AI_REVIEW_WEEKLY_DELIVER", False)
+        result = orch.run_weekly(week=4, dry_run=False, force=False)
+
+        assert result["status"] == "stored"
+        assert result["delivery_count"] == 0
+        assert len(patched_orchestrator["writes"]) == 1
+        assert patched_orchestrator["emails_sent"] == []
+        assert patched_orchestrator["pushes_sent"] == []
+        partials = [u["partial"] for u in patched_orchestrator["metadata_updates"]]
+        assert not any("broadcast_at" in p for p in partials)
+
+
+class TestOrchestratorRenewedLeague:
+    def test_matchups_from_renewal_stored_under_whitelisted_id(
+        self, patched_orchestrator
+    ) -> None:
+        from lambdas.common.constants import CLT_LEAGUE_ID
+        from lambdas.common.weekly_orchestrator import run_weekly
+
+        patched_orchestrator["active_league"] = {"sleeper_league_id": "CLT_2025"}
+        patched_orchestrator["league_chain"][CLT_LEAGUE_ID] = {
+            "league_id": CLT_LEAGUE_ID,
+            "name": "Charlotte Dynasty League",
+            "previous_league_id": "CLT_2025",
+            "season": "2026",
+        }
+
+        result = run_weekly(week=4, dry_run=True, force=False)
+
+        assert patched_orchestrator["matchup_calls"] == [(CLT_LEAGUE_ID, 4)]
+        write = patched_orchestrator["writes"][0]
+        assert write["pk"] == "LEAGUE#CLT_2025"
+        assert result["period"] == "2026W04"
+        assert write["metadata"]["matchup_league_id"] == CLT_LEAGUE_ID
+
+    def test_unrelated_whitelisted_league_keeps_its_own_matchups(
+        self, patched_orchestrator
+    ) -> None:
+        from lambdas.common.weekly_orchestrator import run_weekly
+
+        run_weekly(week=4, dry_run=True, force=False)
+
+        assert patched_orchestrator["matchup_calls"] == [(LEAGUE_ID, 4)]
 
 
 class TestOrchestratorMemories:

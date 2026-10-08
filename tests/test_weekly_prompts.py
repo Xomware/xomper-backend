@@ -161,6 +161,10 @@ class TestBuildUserPrompt:
             assert f"Matchup #{m['matchup_id']}" in prompt
             assert m["winner"]["manager_display_name"] in prompt
             assert m["loser"]["manager_display_name"] in prompt
+            # The lore is keyed by user_id; without it the model guesses
+            # who a Sleeper handle belongs to.
+            assert f"user_id {m['winner']['user_id']}" in prompt
+            assert f"user_id {m['loser']['user_id']}" in prompt
 
     def test_renders_league_high_and_low(self) -> None:
         matchups = self._sample_matchups(2)
